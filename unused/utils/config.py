@@ -6,9 +6,6 @@ from rich import print
 load_dotenv()
 
 
-
-
-
 class ConfigMeta(type):
     def __getattribute__(cls, name) -> str:
         if name == "db_url":

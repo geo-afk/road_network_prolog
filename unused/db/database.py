@@ -1,7 +1,5 @@
-
 from typing import Any, Generator, Generic, Optional, Sequence, Type, TypeVar
 
-from models.models import Location, Road, Route
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.utils.config import Config
@@ -9,7 +7,7 @@ from app.utils.config import Config
 # ------------------------
 # Database Setup
 # ------------------------
-engine = create_engine(Config.db_url,echo=True)
+engine = create_engine(Config.db_url, echo=True)
 SQLModel.metadata.create_all(engine)
 
 
@@ -74,9 +72,9 @@ class DatabaseHandler(Generic[T]):
 next_session = next(get_session())
 
 # You can now create handlers for any model dynamically:
-location_db = DatabaseHandler(next_session, Location)
-road_db = DatabaseHandler(next_session, Road)
-route_db = DatabaseHandler(next_session, Route)
+# location_db = DatabaseHandler(next_session, Location)
+# road_db = DatabaseHandler(next_session, Road)
+# route_db = DatabaseHandler(next_session, Route)
 
 # Example CRUD actions:
 # new_location = Location(name="Downtown", latitude=18.0123, longitude=-76.789)
