@@ -87,152 +87,23 @@ class PathFinderGUI:
         left_column = ttk.Frame(content_frame, style="Card.TFrame")
         left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 15))
 
-        # Location Selection Card
-        location_card = ttk.LabelFrame(
-            left_column,
-            text="  📍 Location Selection  ",
-            padding="20",
-            bootstyle="primary",
-        )
-        location_card.pack(fill=X, pady=(0, 15))
+        # Add tabbed interface for Path Finding and Route Management
+        notebook = ttk.Notebook(left_column)
+        notebook.pack(fill=BOTH, expand=True)
 
-        locations = self.pathfinder.get_available_locations()
+        # Tab 1: Path Finding
+        pathfind_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(pathfind_tab, text="🔍 Find Path")
 
-        # Start Location
-        start_container = ttk.Frame(location_card)
-        start_container.pack(fill=X, pady=(0, 15))
+        # Tab 2: Route Management
+        manage_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(manage_tab, text="➕ Manage Routes")
 
-        start_label = ttk.Label(
-            start_container,
-            text="🏁 Starting Point",
-            style="SectionHeader.TLabel",
-            foreground="#28a745",
-        )
-        start_label.pack(anchor=W, pady=(0, 8))
+        # === PATH FINDING TAB ===
+        self._create_pathfinding_tab(pathfind_tab)
 
-        self.start_var = tk.StringVar()
-
-        self.start_combo = SearchableDropdown(
-            start_container,
-            values=locations,
-            textvariable=self.start_var,
-            bootstyle="success",
-        )
-        self.start_combo.pack(fill=X, pady=(0, 10))
-        self.start_combo.entry.configure(bootstyle="success")
-
-        # Destination
-        dest_container = ttk.Frame(location_card)
-        dest_container.pack(fill=X)
-
-        dest_label = ttk.Label(
-            dest_container,
-            text="🎯 Destination",
-            style="SectionHeader.TLabel",
-            foreground="#dc3545",
-        )
-        dest_label.pack(anchor=W, pady=(0, 8))
-
-        self.goal_var = tk.StringVar()
-        self.goal_combo = SearchableDropdown(
-            dest_container,
-            values=locations,
-            textvariable=self.goal_var,
-            bootstyle="danger",
-        )
-        self.goal_combo.pack(fill=X, pady=(0, 10))
-        self.goal_combo.entry.configure(bootstyle="danger")
-
-        # Algorithm Selection Card
-        algo_card = ttk.LabelFrame(
-            left_column,
-            text="  ⚙️ Algorithm Selection  ",
-            padding="20",
-            bootstyle="info",
-        )
-        algo_card.pack(fill=X, pady=(0, 15))
-
-        self.algo_var = tk.StringVar(value="dijkstra")
-
-        algorithms = [
-            (
-                "dijkstra",
-                "Dijkstra's Algorithm",
-                "Guaranteed shortest path (weighted)",
-            ),
-            ("astar", "A* Algorithm", "Fast heuristic search (weighted)"),
-            ("bfs", "Breadth-First Search", "Unweighted exploration"),
-        ]
-
-        for i, (value, name, desc) in enumerate(algorithms):
-            algo_frame = ttk.Frame(algo_card)
-            algo_frame.pack(fill=X, pady=5)
-
-            ttk.Radiobutton(
-                algo_frame,
-                text=name,
-                variable=self.algo_var,
-                value=value,
-                bootstyle="info-toolbutton",
-            ).pack(side=LEFT)
-
-            ttk.Label(
-                algo_frame,
-                text=f"  —  {desc}",
-                font=("Segoe UI", 9),
-                foreground="#6c757d",
-            ).pack(side=LEFT)
-
-        # Avoidance Criteria Card
-        criteria_card = ttk.LabelFrame(
-            left_column,
-            text="  🚧 Avoidance Criteria  ",
-            padding="20",
-            bootstyle="warning",
-        )
-        criteria_card.pack(fill=X, pady=(0, 15))
-
-        self.avoid_closed = tk.BooleanVar()
-        self.avoid_unpaved = tk.BooleanVar()
-        self.avoid_cisterns = tk.BooleanVar()
-        self.avoid_potholes = tk.BooleanVar()
-
-        criteria = [
-            ("🚫 Closed Roads", self.avoid_closed),
-            ("🛤️ Unpaved Roads", self.avoid_unpaved),
-            ("💧 Broken Cisterns", self.avoid_cisterns),
-            ("🕳️ Deep Potholes", self.avoid_potholes),
-        ]
-
-        for text, var in criteria:
-            check_frame = ttk.Frame(criteria_card)
-            check_frame.pack(fill=X, pady=4)
-
-            ttk.Checkbutton(
-                check_frame, text=text, variable=var, bootstyle="warning-round-toggle"
-            ).pack(side=LEFT)
-
-        # Search Button
-        button_frame = ttk.Frame(left_column)
-        button_frame.pack(pady=15)
-
-        self.search_btn = ttk.Button(
-            button_frame,
-            text="🔍  Find Optimal Path",
-            command=self.find_path,
-            bootstyle="success",
-            width=30,
-        )
-        self.search_btn.pack()
-
-        self.clear_btn = ttk.Button(
-            button_frame,
-            text="Clear Results",
-            command=self.clear_results,
-            bootstyle="secondary-outline",
-            width=30,
-        )
-        self.clear_btn.pack(pady=(10, 0))
+        # === ROUTE MANAGEMENT TAB ===
+        self._create_route_management_tab(manage_tab)
 
         # Right Column - Results (RESPONSIVE)
         right_column = ttk.Frame(content_frame, style="Card.TFrame")
@@ -288,8 +159,6 @@ class PathFinderGUI:
         )
 
         # Textual results (RESPONSIVE)
-        # === MODERN DETAILED INFORMATION SECTION (FIXED SCROLL + HORIZONTAL WRAP) ===
-        # === MODERN DETAILED INFORMATION SECTION (CENTERED + SCROLLABLE) ===
         text_container = ttk.Frame(results_card)
         text_container.grid(row=1, column=0, sticky=NSEW, pady=(0, 10))
 
@@ -367,6 +236,838 @@ class PathFinderGUI:
         self.details_container = scrollable_frame
         details_canvas.focus_set()
 
+    def _create_pathfinding_tab(self, parent):
+        """Create the path finding interface"""
+        # Location Selection Card
+        location_card = ttk.LabelFrame(
+            parent,
+            text="  📍 Location Selection  ",
+            padding="20",
+            bootstyle="primary",
+        )
+        location_card.pack(fill=X, pady=(0, 15))
+
+        locations = self.pathfinder.get_available_locations()
+
+        # Start Location
+        start_container = ttk.Frame(location_card)
+        start_container.pack(fill=X, pady=(0, 15))
+
+        start_label = ttk.Label(
+            start_container,
+            text="🚀 Starting Point",
+            style="SectionHeader.TLabel",
+            foreground="#28a745",
+        )
+        start_label.pack(anchor=W, pady=(0, 8))
+
+        self.start_var = tk.StringVar()
+
+        self.start_combo = SearchableDropdown(
+            start_container,
+            values=locations,
+            textvariable=self.start_var,
+            bootstyle="success",
+        )
+        self.start_combo.pack(fill=X, pady=(0, 10))
+        self.start_combo.entry.configure(bootstyle="success")
+
+        # Destination
+        dest_container = ttk.Frame(location_card)
+        dest_container.pack(fill=X)
+
+        dest_label = ttk.Label(
+            dest_container,
+            text="🎯 Destination",
+            style="SectionHeader.TLabel",
+            foreground="#dc3545",
+        )
+        dest_label.pack(anchor=W, pady=(0, 8))
+
+        self.goal_var = tk.StringVar()
+        self.goal_combo = SearchableDropdown(
+            dest_container,
+            values=locations,
+            textvariable=self.goal_var,
+            bootstyle="danger",
+        )
+        self.goal_combo.pack(fill=X, pady=(0, 10))
+        self.goal_combo.entry.configure(bootstyle="danger")
+
+        # Algorithm Selection Card
+        algo_card = ttk.LabelFrame(
+            parent,
+            text="  ⚙️ Algorithm Selection  ",
+            padding="20",
+            bootstyle="info",
+        )
+        algo_card.pack(fill=X, pady=(0, 15))
+
+        self.algo_var = tk.StringVar(value="dijkstra")
+
+        algorithms = [
+            (
+                "dijkstra",
+                "Dijkstra's Algorithm",
+                "Guaranteed shortest path (weighted)",
+            ),
+            ("astar", "A* Algorithm", "Fast heuristic search (weighted)"),
+            ("bfs", "Breadth-First Search", "Unweighted exploration"),
+        ]
+
+        for i, (value, name, desc) in enumerate(algorithms):
+            algo_frame = ttk.Frame(algo_card)
+            algo_frame.pack(fill=X, pady=5)
+
+            ttk.Radiobutton(
+                algo_frame,
+                text=name,
+                variable=self.algo_var,
+                value=value,
+                bootstyle="info-toolbutton",
+            ).pack(side=LEFT)
+
+            ttk.Label(
+                algo_frame,
+                text=f"  —  {desc}",
+                font=("Segoe UI", 9),
+                foreground="#6c757d",
+            ).pack(side=LEFT)
+
+        # Avoidance Criteria Card
+        criteria_card = ttk.LabelFrame(
+            parent,
+            text="  🚧 Avoidance Criteria  ",
+            padding="20",
+            bootstyle="warning",
+        )
+        criteria_card.pack(fill=X, pady=(0, 15))
+
+        self.avoid_closed = tk.BooleanVar()
+        self.avoid_unpaved = tk.BooleanVar()
+        self.avoid_cisterns = tk.BooleanVar()
+        self.avoid_potholes = tk.BooleanVar()
+
+        criteria = [
+            ("🚫 Closed Roads", self.avoid_closed),
+            ("🛤️ Unpaved Roads", self.avoid_unpaved),
+            ("💧 Broken Cisterns", self.avoid_cisterns),
+            ("🕳️ Deep Potholes", self.avoid_potholes),
+        ]
+
+        for text, var in criteria:
+            check_frame = ttk.Frame(criteria_card)
+            check_frame.pack(fill=X, pady=4)
+
+            ttk.Checkbutton(
+                check_frame, text=text, variable=var, bootstyle="warning-round-toggle"
+            ).pack(side=LEFT)
+
+        # Search Button
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(pady=15)
+
+        self.search_btn = ttk.Button(
+            button_frame,
+            text="🔍 Find Optimal Path",
+            command=self.find_path,
+            bootstyle="success",
+            width=30,
+        )
+        self.search_btn.pack()
+
+        self.clear_btn = ttk.Button(
+            button_frame,
+            text="Clear Results",
+            command=self.clear_results,
+            bootstyle="secondary-outline",
+            width=30,
+        )
+        self.clear_btn.pack(pady=(10, 0))
+
+    def _create_route_management_tab(self, parent):
+        """Create the route management interface"""
+        # Scrollable container for the tab with proper geometry
+        canvas = tk.Canvas(parent, highlightthickness=0, bg="#f8f9fa")
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas, padding=10)
+
+        def configure_scroll(*args):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Ensure canvas is wide enough for dropdowns
+            canvas_width = canvas.winfo_width()
+            if canvas_width > 1:
+                canvas.itemconfig(scroll_window, width=canvas_width - 20)
+
+        scrollable_frame.bind("<Configure>", configure_scroll)
+        canvas.bind("<Configure>", configure_scroll)
+
+        scroll_window = canvas.create_window(
+            (0, 0), window=scrollable_frame, anchor="nw", width=330
+        )
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def bind_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def unbind_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+
+        scrollable_frame.bind("<Enter>", bind_mousewheel)
+        scrollable_frame.bind("<Leave>", unbind_mousewheel)
+
+        locations = self.pathfinder.get_available_locations()
+
+        # === ADD ROAD CARD ===
+        add_card = ttk.LabelFrame(
+            scrollable_frame,
+            text="  ➕ Add New Route  ",
+            padding="20",
+            bootstyle="success",
+        )
+        add_card.pack(fill=X, pady=(0, 15))
+
+        # From Location
+        from_container = ttk.Frame(add_card)
+        from_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            from_container,
+            text="From Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.add_from_var = tk.StringVar()
+        self.add_from_combo = SearchableDropdown(
+            from_container,
+            values=locations,
+            textvariable=self.add_from_var,
+            bootstyle="primary",
+            placeholder="Select starting location...",
+        )
+        self.add_from_combo.pack(fill=X)
+
+        # To Location
+        to_container = ttk.Frame(add_card)
+        to_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            to_container,
+            text="To Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.add_to_var = tk.StringVar()
+        self.add_to_combo = SearchableDropdown(
+            to_container,
+            values=locations,
+            textvariable=self.add_to_var,
+            bootstyle="primary",
+            placeholder="Select destination location...",
+        )
+        self.add_to_combo.pack(fill=X)
+
+        # Distance
+        dist_container = ttk.Frame(add_card)
+        dist_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            dist_container,
+            text="Distance (km):",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.add_distance_var = tk.StringVar()
+        ttk.Entry(
+            dist_container,
+            textvariable=self.add_distance_var,
+            font=("Segoe UI", 11),
+        ).pack(fill=X)
+
+        # Road Type
+        type_container = ttk.Frame(add_card)
+        type_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            type_container,
+            text="Road Type:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.add_type_var = tk.StringVar(value="paved")
+        type_frame = ttk.Frame(type_container)
+        type_frame.pack(fill=X)
+
+        road_types = [
+            ("paved", "Paved"),
+            ("unpaved", "Unpaved"),
+            ("broken_cisterns", "Broken Cisterns"),
+            ("deep_potholes", "Deep Potholes"),
+        ]
+
+        for value, label in road_types:
+            ttk.Radiobutton(
+                type_frame,
+                text=label,
+                variable=self.add_type_var,
+                value=value,
+                bootstyle="success-toolbutton",
+            ).pack(side=LEFT, padx=5, pady=2)
+
+        # Road Status
+        status_container = ttk.Frame(add_card)
+        status_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            status_container,
+            text="Road Status:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.add_status_var = tk.StringVar(value="open")
+        status_frame = ttk.Frame(status_container)
+        status_frame.pack(fill=X)
+
+        ttk.Radiobutton(
+            status_frame,
+            text="Open",
+            variable=self.add_status_var,
+            value="open",
+            bootstyle="success-toolbutton",
+        ).pack(side=LEFT, padx=5)
+
+        ttk.Radiobutton(
+            status_frame,
+            text="Closed",
+            variable=self.add_status_var,
+            value="closed",
+            bootstyle="danger-toolbutton",
+        ).pack(side=LEFT, padx=5)
+
+        # Add Button
+        ttk.Button(
+            add_card,
+            text="➕ Add Route",
+            command=self.add_route,
+            bootstyle="success",
+            width=25,
+        ).pack(pady=(10, 0))
+
+        # === UPDATE ROAD STATUS CARD ===
+        update_card = ttk.LabelFrame(
+            scrollable_frame,
+            text="  🔄 Update Route Status  ",
+            padding="20",
+            bootstyle="warning",
+        )
+        update_card.pack(fill=X, pady=(0, 15))
+
+        # From Location for Update
+        update_from_container = ttk.Frame(update_card)
+        update_from_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            update_from_container,
+            text="From Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.update_from_var = tk.StringVar()
+        self.update_from_combo = SearchableDropdown(
+            update_from_container,
+            values=locations,
+            textvariable=self.update_from_var,
+            bootstyle="primary",
+            placeholder="Select starting location...",
+        )
+        self.update_from_combo.pack(fill=X)
+
+        # To Location for Update
+        update_to_container = ttk.Frame(update_card)
+        update_to_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            update_to_container,
+            text="To Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.update_to_var = tk.StringVar()
+        self.update_to_combo = SearchableDropdown(
+            update_to_container,
+            values=locations,
+            textvariable=self.update_to_var,
+            bootstyle="primary",
+            placeholder="Select destination location...",
+        )
+        self.update_to_combo.pack(fill=X)
+
+        # New Status
+        new_status_container = ttk.Frame(update_card)
+        new_status_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            new_status_container,
+            text="New Status:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.update_status_var = tk.StringVar(value="open")
+        update_status_frame = ttk.Frame(new_status_container)
+        update_status_frame.pack(fill=X)
+
+        ttk.Radiobutton(
+            update_status_frame,
+            text="Open",
+            variable=self.update_status_var,
+            value="open",
+            bootstyle="success-toolbutton",
+        ).pack(side=LEFT, padx=5)
+
+        ttk.Radiobutton(
+            update_status_frame,
+            text="Closed",
+            variable=self.update_status_var,
+            value="closed",
+            bootstyle="danger-toolbutton",
+        ).pack(side=LEFT, padx=5)
+
+        # Update Button
+        ttk.Button(
+            update_card,
+            text="🔄 Update Status",
+            command=self.update_route_status,
+            bootstyle="warning",
+            width=25,
+        ).pack(pady=(10, 0))
+
+        # === UPDATE ROAD TYPE CARD ===
+        update_type_card = ttk.LabelFrame(
+            scrollable_frame,
+            text="  🛠️ Update Route Type  ",
+            padding="20",
+            bootstyle="info",
+        )
+        update_type_card.pack(fill=X, pady=(0, 15))
+
+        # From Location for Type Update
+        type_from_container = ttk.Frame(update_type_card)
+        type_from_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            type_from_container,
+            text="From Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.type_from_var = tk.StringVar()
+        self.type_from_combo = SearchableDropdown(
+            type_from_container,
+            values=locations,
+            textvariable=self.type_from_var,
+            bootstyle="primary",
+            placeholder="Select starting location...",
+        )
+        self.type_from_combo.pack(fill=X)
+
+        # To Location for Type Update
+        type_to_container = ttk.Frame(update_type_card)
+        type_to_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            type_to_container,
+            text="To Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.type_to_var = tk.StringVar()
+        self.type_to_combo = SearchableDropdown(
+            type_to_container,
+            values=locations,
+            textvariable=self.type_to_var,
+            bootstyle="primary",
+            placeholder="Select destination location...",
+        )
+        self.type_to_combo.pack(fill=X)
+
+        # New Type
+        new_type_container = ttk.Frame(update_type_card)
+        new_type_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            new_type_container,
+            text="New Road Type:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.new_type_var = tk.StringVar(value="paved")
+        new_type_frame = ttk.Frame(new_type_container)
+        new_type_frame.pack(fill=X)
+
+        for value, label in road_types:
+            ttk.Radiobutton(
+                new_type_frame,
+                text=label,
+                variable=self.new_type_var,
+                value=value,
+                bootstyle="info-toolbutton",
+            ).pack(side=LEFT, padx=5, pady=2)
+
+        # Update Type Button
+        ttk.Button(
+            update_type_card,
+            text="🛠️ Update Type",
+            command=self.update_route_type,
+            bootstyle="info",
+            width=25,
+        ).pack(pady=(10, 0))
+
+        # === DELETE ROAD CARD ===
+        delete_card = ttk.LabelFrame(
+            scrollable_frame,
+            text="  🗑️ Delete Route  ",
+            padding="20",
+            bootstyle="danger",
+        )
+        delete_card.pack(fill=X, pady=(0, 15))
+
+        # From Location for Delete
+        delete_from_container = ttk.Frame(delete_card)
+        delete_from_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            delete_from_container,
+            text="From Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.delete_from_var = tk.StringVar()
+        self.delete_from_combo = SearchableDropdown(
+            delete_from_container,
+            values=locations,
+            textvariable=self.delete_from_var,
+            bootstyle="primary",
+            placeholder="Select starting location...",
+        )
+        self.delete_from_combo.pack(fill=X)
+
+        # To Location for Delete
+        delete_to_container = ttk.Frame(delete_card)
+        delete_to_container.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(
+            delete_to_container,
+            text="To Location:",
+            style="SectionHeader.TLabel",
+        ).pack(anchor=W, pady=(0, 5))
+
+        self.delete_to_var = tk.StringVar()
+        self.delete_to_combo = SearchableDropdown(
+            delete_to_container,
+            values=locations,
+            textvariable=self.delete_to_var,
+            bootstyle="primary",
+            placeholder="Select destination location...",
+        )
+        self.delete_to_combo.pack(fill=X)
+
+        # Delete Button
+        ttk.Button(
+            delete_card,
+            text="🗑️ Delete Route",
+            command=self.delete_route,
+            bootstyle="danger",
+            width=25,
+        ).pack(pady=(10, 0))
+
+        # === UTILITY BUTTONS ===
+        utility_card = ttk.LabelFrame(
+            scrollable_frame,
+            text="  💾 Utilities  ",
+            padding="20",
+            bootstyle="secondary",
+        )
+        utility_card.pack(fill=X, pady=(0, 15))
+
+        button_frame = ttk.Frame(utility_card)
+        button_frame.pack(fill=X)
+
+        ttk.Button(
+            button_frame,
+            text="💾 Backup Prolog File",
+            command=self.backup_prolog_file,
+            bootstyle="info",
+            width=25,
+        ).pack(pady=5)
+
+        ttk.Button(
+            button_frame,
+            text="📤 Export All Routes",
+            command=self.export_routes,
+            bootstyle="secondary",
+            width=25,
+        ).pack(pady=5)
+
+        ttk.Button(
+            button_frame,
+            text="🔄 Refresh Locations",
+            command=self._refresh_location_dropdowns,
+            bootstyle="primary-outline",
+            width=25,
+        ).pack(pady=5)
+
+    def add_route(self):
+        """Add a new route to the network"""
+        from_loc = self.add_from_var.get()
+        to_loc = self.add_to_var.get()
+        distance = self.add_distance_var.get()
+        road_type = self.add_type_var.get()
+        status = self.add_status_var.get()
+
+        # Validation
+        if not from_loc or not to_loc:
+            messagebox.showwarning("Input Required", "Please select both locations.")
+            return
+
+        if from_loc == to_loc:
+            messagebox.showwarning(
+                "Invalid Route", "Starting and destination locations must be different."
+            )
+            return
+
+        try:
+            distance_float = float(distance)
+            if distance_float <= 0:
+                raise ValueError()
+        except ValueError:
+            messagebox.showwarning(
+                "Invalid Distance",
+                "Please enter a valid positive distance in kilometers.",
+            )
+            return
+
+        # Convert location names to Prolog format
+        from_loc_pl = self.pathfinder.unformat_name(from_loc)
+        to_loc_pl = self.pathfinder.unformat_name(to_loc)
+
+        # Add the route
+        try:
+            success = self.pathfinder.add_road(
+                from_loc_pl, to_loc_pl, distance_float, road_type, status
+            )
+
+            if success:
+                messagebox.showinfo(
+                    "Success",
+                    f"Route added successfully!\n\nFrom: {from_loc}\nTo: {to_loc}\nDistance: {distance_float} km\nType: {road_type.replace('_', ' ').title()}\nStatus: {status.title()}\n\n✅ Changes saved to Prolog file.",
+                )
+
+                # Clear the form
+                self.add_from_var.set("")
+                self.add_to_var.set("")
+                self.add_distance_var.set("")
+                self.add_type_var.set("paved")
+                self.add_status_var.set("open")
+
+                # Refresh location dropdowns
+                self._refresh_location_dropdowns()
+            else:
+                messagebox.showerror("Error", "Failed to add route. Please try again.")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def update_route_status(self):
+        """Update the status of an existing route"""
+        from_loc = self.update_from_var.get()
+        to_loc = self.update_to_var.get()
+        new_status = self.update_status_var.get()
+
+        # Validation
+        if not from_loc or not to_loc:
+            messagebox.showwarning("Input Required", "Please select both locations.")
+            return
+
+        # Convert location names to Prolog format
+        from_loc_pl = self.pathfinder.unformat_name(from_loc)
+        to_loc_pl = self.pathfinder.unformat_name(to_loc)
+
+        # Update the status
+        try:
+            success = self.pathfinder.update_road_status(
+                from_loc_pl, to_loc_pl, new_status
+            )
+
+            if success:
+                messagebox.showinfo(
+                    "Success",
+                    f"Route status updated successfully!\n\nFrom: {from_loc}\nTo: {to_loc}\nNew Status: {new_status.title()}\n\n✅ Changes saved to Prolog file.",
+                )
+
+                # Clear the form
+                self.update_from_var.set("")
+                self.update_to_var.set("")
+                self.update_status_var.set("open")
+            else:
+                messagebox.showerror(
+                    "Error", "Failed to update route status. Route may not exist."
+                )
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def update_route_type(self):
+        """Update the type of an existing route"""
+        from_loc = self.type_from_var.get()
+        to_loc = self.type_to_var.get()
+        new_type = self.new_type_var.get()
+
+        # Validation
+        if not from_loc or not to_loc:
+            messagebox.showwarning("Input Required", "Please select both locations.")
+            return
+
+        # Convert location names to Prolog format
+        from_loc_pl = self.pathfinder.unformat_name(from_loc)
+        to_loc_pl = self.pathfinder.unformat_name(to_loc)
+
+        # Update the type
+        try:
+            success = self.pathfinder.update_road_type(from_loc_pl, to_loc_pl, new_type)
+
+            if success:
+                messagebox.showinfo(
+                    "Success",
+                    f"Route type updated successfully!\n\nFrom: {from_loc}\nTo: {to_loc}\nNew Type: {new_type.replace('_', ' ').title()}\n\n✅ Changes saved to Prolog file.",
+                )
+
+                # Clear the form
+                self.type_from_var.set("")
+                self.type_to_var.set("")
+                self.new_type_var.set("paved")
+            else:
+                messagebox.showerror(
+                    "Error", "Failed to update route type. Route may not exist."
+                )
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def delete_route(self):
+        """Delete a route from the network"""
+        from_loc = self.delete_from_var.get()
+        to_loc = self.delete_to_var.get()
+
+        # Validation
+        if not from_loc or not to_loc:
+            messagebox.showwarning("Input Required", "Please select both locations.")
+            return
+
+        # Confirm deletion
+        confirm = messagebox.askyesno(
+            "Confirm Deletion",
+            f"Are you sure you want to delete this route?\n\nFrom: {from_loc}\nTo: {to_loc}\n\n⚠️ This action cannot be undone!",
+        )
+
+        if not confirm:
+            return
+
+        # Convert location names to Prolog format
+        from_loc_pl = self.pathfinder.unformat_name(from_loc)
+        to_loc_pl = self.pathfinder.unformat_name(to_loc)
+
+        # Delete the route
+        try:
+            success = self.pathfinder.delete_road(from_loc_pl, to_loc_pl)
+
+            if success:
+                messagebox.showinfo(
+                    "Success",
+                    f"Route deleted successfully!\n\nFrom: {from_loc}\nTo: {to_loc}\n\n✅ Changes saved to Prolog file.",
+                )
+
+                # Clear the form
+                self.delete_from_var.set("")
+                self.delete_to_var.set("")
+
+                # Refresh location dropdowns
+                self._refresh_location_dropdowns()
+            else:
+                messagebox.showerror(
+                    "Error", "Failed to delete route. Route may not exist."
+                )
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def backup_prolog_file(self):
+        """Create a backup of the Prolog file"""
+        try:
+            backup_file = self.pathfinder.backup_prolog_file()
+            messagebox.showinfo(
+                "Backup Created",
+                f"Backup created successfully!\n\n📁 {backup_file}\n\nYou can restore from this file if needed.",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create backup: {str(e)}")
+
+    def export_routes(self):
+        """Export all routes to a file"""
+        from tkinter import filedialog
+
+        try:
+            # Ask user for file location
+            export_file = filedialog.asksaveasfilename(
+                defaultextension=".pl",
+                filetypes=[("Prolog Files", "*.pl"), ("All Files", "*.*")],
+                title="Export Routes To...",
+            )
+
+            if export_file:
+                success = self.pathfinder.export_roads_to_file(export_file)
+
+                if success:
+                    messagebox.showinfo(
+                        "Export Successful",
+                        f"All routes exported successfully!\n\n📁 {export_file}",
+                    )
+                else:
+                    messagebox.showerror("Error", "Failed to export routes.")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def _refresh_location_dropdowns(self):
+        """Refresh all location dropdowns with updated locations"""
+        try:
+            locations = self.pathfinder.get_available_locations()
+
+            # Update all dropdowns
+            dropdowns = [
+                self.start_combo,
+                self.goal_combo,
+                self.add_from_combo,
+                self.add_to_combo,
+                self.update_from_combo,
+                self.update_to_combo,
+                self.type_from_combo,
+                self.type_to_combo,
+                self.delete_from_combo,
+                self.delete_to_combo,
+            ]
+
+            for combo in dropdowns:
+                combo.values = locations
+                combo.filtered_values = locations
+
+            messagebox.showinfo(
+                "Refreshed", "Location lists have been updated with the latest data."
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"Error refreshing dropdowns: {e}")
+
     def on_canvas_resize(self, event):
         """Handle canvas resize events to redraw the path"""
         if self.last_path:
@@ -400,7 +1101,7 @@ class PathFinderGUI:
             widget.destroy()
 
         placeholder_frame = ttk.Frame(self.details_container)
-        placeholder_frame.pack(expand=True)  # This allows centering
+        placeholder_frame.pack(expand=True)
 
         placeholder = ttk.Label(
             placeholder_frame,
@@ -493,7 +1194,7 @@ class PathFinderGUI:
 
                 ttk.Label(
                     header,
-                    text="Route Found Successfully!",
+                    text="✅ Route Found Successfully!",
                     font=("Segoe UI", 19, "bold"),
                     foreground="#28a745",
                 ).pack(side=LEFT)
@@ -509,7 +1210,7 @@ class PathFinderGUI:
                 algo_tag.pack(side=RIGHT)
 
                 path_frame = ttk.LabelFrame(
-                    self.details_container, text=" Route Path", padding=15
+                    self.details_container, text=" 🛣️ Route Path", padding=15
                 )
                 path_frame.pack(fill=X, pady=12)
 
@@ -601,7 +1302,7 @@ class PathFinderGUI:
                 if criteria:
                     crit_frame = ttk.LabelFrame(
                         self.details_container,
-                        text=" Active Avoidance Rules",
+                        text=" ⚠️ Active Avoidance Rules",
                         padding=12,
                     )
                     crit_frame.pack(fill=X, pady=12)
@@ -626,7 +1327,7 @@ class PathFinderGUI:
                 # === FINAL MESSAGE ===
                 ttk.Label(
                     self.details_container,
-                    text="Safe travels on Jamaica's beautiful rural roads!",
+                    text="🌴 Safe travels on Jamaica's beautiful rural roads!",
                     font=("Segoe UI", 11, "italic"),
                     foreground="#495057",
                 ).pack(pady=(25, 10))
@@ -638,7 +1339,7 @@ class PathFinderGUI:
 
                 ttk.Label(
                     error_frame,
-                    text="No Route Available",
+                    text="❌ No Route Available",
                     font=("Segoe UI", 22, "bold"),
                     foreground="#dc3545",
                 ).pack(pady=(0, 15))
@@ -654,7 +1355,7 @@ class PathFinderGUI:
                     justify="center",
                 ).pack(pady=(0, 25))
 
-                tips = ttk.LabelFrame(error_frame, text=" Suggestions", padding=15)
+                tips = ttk.LabelFrame(error_frame, text=" 💡 Suggestions", padding=15)
                 tips.pack(fill=X, padx=40)
 
                 for tip in [
@@ -675,7 +1376,7 @@ class PathFinderGUI:
 
             ttk.Label(
                 self.details_container,
-                text="Search Error",
+                text="⚠️ Search Error",
                 font=("Segoe UI", 20, "bold"),
                 foreground="#dc3545",
             ).pack(pady=(40, 10))
@@ -687,7 +1388,7 @@ class PathFinderGUI:
             ).pack()
 
         finally:
-            self.search_btn.configure(text="Find Optimal Path", state="normal")
+            self.search_btn.configure(text="🔍 Find Optimal Path", state="normal")
 
     def _draw_road_path(self, path):
         """Draws a realistic road path with smooth curves connecting locations."""
@@ -740,7 +1441,7 @@ class PathFinderGUI:
                 main_color = "#28a745"
                 border_color = "#218838"
                 text_color = "white"
-                icon = "🏁"
+                icon = "🚀"
                 label_text = "START"
                 label_bg = "#d4edda"
                 label_fg = "#155724"
