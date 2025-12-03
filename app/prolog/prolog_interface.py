@@ -1,247 +1,140 @@
 from pyswip import Prolog
 import os
+import logging
+from typing import List, Dict, Any, Optional
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 
 
 class RoadNetworkPathFinder:
-    def __init__(self, prolog_file="./app/prolog/road_network.pl"):
-        """Initialize the Prolog engine and load knowledge base"""
+    SUPPORTED_ALGORITHMS = {"dijkstra", "astar", "bfs"}
+
+    def __init__(self, prolog_file: str = "./app/prolog/road_network.pl") -> None:
         self.prolog = Prolog()
+        self._load_knowledge_base(prolog_file)
 
-        # Check if Prolog file exists
+    def _load_knowledge_base(self, prolog_file: str) -> None:
         if not os.path.exists(prolog_file):
-            raise FileNotFoundError(f"Prolog file {prolog_file} not found!")
-        # Load the Prolog knowledge base
+            raise FileNotFoundError(f"Prolog file '{prolog_file}' not found")
+
         self.prolog.consult(prolog_file)
-        print(f"✓ Loaded {prolog_file}")
+        logger.info("Loaded Prolog file: %s", prolog_file)
 
-    def find_path(self, start, goal, algorithm="dijkstra", criteria=None):
-        """
-        Find path between two locations
+    # -------- MAIN API ---------
 
-        Args:
-            start: Starting location
-            goal: Destination location
-            algorithm: 'dijkstra', 'astar', or 'bfs'
-            criteria: List of criteria to avoid (e.g., ['avoid_closed', 'avoid_unpaved'])
+    def find_path(
+        self,
+        start: str,
+        goal: str,
+        algorithm: str = "dijkstra",
+        criteria: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        if algorithm not in self.SUPPORTED_ALGORITHMS:
+            raise ValueError(f"Unsupported algorithm '{algorithm}'")
 
-        Returns:
-            Dictionary with path, distance, and status
-        """
-        if criteria is None:
-            criteria = []
+        criteria = criteria or []
+        query = self._build_query(start, goal, algorithm, criteria)
 
-        # Convert Python list to Prolog list format
-        criteria_str = "[" + ",".join(criteria) + "]"
+        result = self._execute_query(query)
 
-        try:
-            if algorithm == "dijkstra":
-                query = (
-                    f"dijkstra_path({start}, {goal}, {criteria_str}, Path, Distance)"
-                )
-                result = list(self.prolog.query(query))
+        if not result:
+            return self._failure("No path found")
 
-                if result:
-                    path = result[0]["Path"]
-                    distance = result[0]["Distance"]
-                    return {
-                        "success": True,
-                        "path": path,
-                        "distance": distance,
-                        "algorithm": "Dijkstra",
-                    }
+        return self._build_success_response(result[0], algorithm)
 
-            elif algorithm == "astar":
-                query = f"astar_path({start}, {goal}, {criteria_str}, Path, Distance)"
-                result = list(self.prolog.query(query))
+    # -------- ROAD MANAGEMENT ---------
 
-                if result:
-                    path = result[0]["Path"]
-                    distance = result[0]["Distance"]
-                    return {
-                        "success": True,
-                        "path": path,
-                        "distance": distance,
-                        "algorithm": "A*",
-                    }
+    def add_road(
+        self, from_loc: str, to_loc: str, distance: float, road_type: str, status: str
+    ) -> bool:
+        return self._bool_query(
+            f"add_road({from_loc}, {to_loc}, {distance}, {road_type}, {status})"
+        )
 
-            elif algorithm == "bfs":
-                query = f"bfs_path({start}, {goal}, {criteria_str}, Path)"
-                result = list(self.prolog.query(query))
+    def update_road_status(self, from_loc: str, to_loc: str, new_status: str) -> bool:
+        return self._bool_query(
+            f"update_road_status({from_loc}, {to_loc}, {new_status})"
+        )
 
-                if result:
-                    path = result[0]["Path"]
-                    # Calculate distance for BFS
-                    dist_query = f"calculate_distance({path}, Distance)"
-                    dist_result = list(self.prolog.query(dist_query))
-                    distance = dist_result[0]["Distance"] if dist_result else 0
+    def list_roads(self) -> List[Any]:
+        result = self._execute_query("list_all_roads(Roads)")
+        return result[0]["Roads"] if result else []
 
-                    return {
-                        "success": True,
-                        "path": path,
-                        "distance": distance,
-                        "algorithm": "BFS",
-                    }
-
-            return {"success": False, "message": "No path found between the locations"}
-
-        except Exception as e:
-            return {"success": False, "message": f"Error: {str(e)}"}
-
-    def add_road(self, from_loc, to_loc, distance, road_type, status):
-        """Add a new road to the network"""
-        query = f"add_road({from_loc}, {to_loc}, {distance}, {road_type}, {status})"
-        try:
-            list(self.prolog.query(query))
-            return True
-        except:
-            return False
-
-    def update_road_status(self, from_loc, to_loc, new_status):
-        """Update the status of an existing road"""
-        query = f"update_road_status({from_loc}, {to_loc}, {new_status})"
-        try:
-            list(self.prolog.query(query))
-            return True
-        except:
-            return False
-
-    def list_roads(self):
-        """Get all roads in the network"""
-        query = "list_all_roads(Roads)"
-        result = list(self.prolog.query(query))
-        if result:
-            return result[0]["Roads"]
-        return []
-
-    def get_available_locations(self):
-        """Get all unique locations in the network"""
+    def get_available_locations(self) -> List[str]:
         roads = self.list_roads()
-        locations = set()
-        for road in roads:
-            locations.add(road[0])  # From
-            locations.add(road[1])  # To
-        return sorted(list(locations))
+        locations = {self.format_name(road[0]) for road in roads}.union(
+            self.format_name(road[1]) for road in roads
+        )
+        return sorted(locations)
 
+    # -------- HELPERS ---------
 
-def display_menu():
-    """Display the main menu"""
-    print("\n" + "=" * 60)
-    print("  JAMAICAN RURAL ROAD NETWORK PATH-FINDER")
-    print("=" * 60)
-    print("1. Find Shortest Path")
-    print("2. Add New Road (Admin)")
-    print("3. Update Road Status (Admin)")
-    print("4. View All Roads")
-    print("5. Exit")
-    print("=" * 60)
+    def _execute_query(self, query: str) -> List[Dict]:
+        try:
+            return list(self.prolog.query(query))
+        except Exception as e:
+            logger.exception("Prolog query failed: %s, Error: [%s]", query, e)
+            return []
 
+    def _bool_query(self, query: str) -> bool:
+        try:
+            list(self.prolog.query(query))
+            return True
+        except Exception as e:
+            logger.warning("Err: [%s], Query failed: %s", e.__str__(), query)
+            return False
 
-def main():
-    """Main program loop"""
-    try:
-        pathfinder = RoadNetworkPathFinder()
-    except Exception as e:
-        print(f"Error initializing system: {e}")
-        return
+    def _build_query(
+        self, start: str, goal: str, algorithm: str, criteria: List[str]
+    ) -> str:
+        crit = self._format_list(criteria)
 
-    while True:
-        display_menu()
-        choice = input("\nSelect option (1-5): ").strip()
+        if algorithm == "dijkstra":
+            return f"dijkstra_path({start}, {goal}, {crit}, Path, Distance)"
 
-        if choice == "1":
-            # Find path
-            print("\n--- PATH FINDER ---")
-            locations = pathfinder.get_available_locations()
-            print(f"Available locations: {', '.join(locations)}")
+        if algorithm == "astar":
+            return f"astar_path({start}, {goal}, {crit}, Path, Distance)"
 
-            start = (
-                input("\nEnter starting location: ").strip().lower().replace(" ", "_")
-            )
-            goal = input("Enter destination: ").strip().lower().replace(" ", "_")
+        if algorithm == "bfs":
+            return f"bfs_path({start}, {goal}, {crit}, Path)"
 
-            print("\nSelect algorithm:")
-            print("1. Dijkstra (shortest distance)")
-            print("2. A* (with heuristics)")
-            print("3. BFS (simple search)")
-            algo_choice = input("Choice (1-3): ").strip()
+        raise ValueError("Unsupported algorithm")
 
-            algo_map = {"1": "dijkstra", "2": "astar", "3": "bfs"}
-            algorithm = algo_map.get(algo_choice, "dijkstra")
+    def _build_success_response(self, result: Dict, algorithm: str) -> Dict[str, Any]:
+        response = {
+            "success": True,
+            "path": result.get("Path"),
+            "algorithm": algorithm.upper(),
+        }
 
-            print(
-                "\nSelect criteria to avoid (comma-separated, or press Enter for none):"
-            )
-            print(
-                "Options: avoid_closed, avoid_unpaved, avoid_broken_cisterns, avoid_potholes"
-            )
-            criteria_input = input("Criteria: ").strip()
-            criteria = [c.strip() for c in criteria_input.split(",") if c.strip()]
+        if "Distance" in result:
+            response["distance"] = result["Distance"]
+        elif algorithm == "bfs":
+            response["distance"] = self._calculate_distance(result["Path"])
 
-            print("\nSearching for path...")
-            result = pathfinder.find_path(start, goal, algorithm, criteria)
+        return response
 
-            if result["success"]:
-                print(f"\n✓ Path found using {result['algorithm']} algorithm!")
-                print(f"Route: {' → '.join(str(loc) for loc in result['path'])}")
-                print(f"Total Distance: {result['distance']} km")
+    def _calculate_distance(self, path: List[str]) -> float:
+        result = self._execute_query(f"calculate_distance({path}, Distance)")
+        return result[0]["Distance"] if result else 0.0
 
-                # Estimate travel time (assume 40 km/h average)
-                travel_time = result["distance"] / 40
-                print(f"Estimated Travel Time: {travel_time:.1f} hours")
-            else:
-                print(f"\n✗ {result['message']}")
+    def _format_list(self, items: List[str]) -> str:
+        return "[" + ",".join(items) + "]"
 
-        elif choice == "2":
-            # Add road
-            print("\n--- ADD NEW ROAD ---")
-            from_loc = input("From location: ").strip().lower().replace(" ", "_")
-            to_loc = input("To location: ").strip().lower().replace(" ", "_")
-            distance = input("Distance (km): ").strip()
+    @staticmethod
+    def format_name(name: str) -> str:
+        """Convert 'new_york' → 'New York'"""
+        return name.replace("_", " ").title()
 
-            print("Road type: paved, unpaved, broken_cisterns, deep_potholes")
-            road_type = input("Type: ").strip().lower()
+    @staticmethod
+    def unformat_name(name: str) -> str:
+        """Convert 'New York' → 'new_york'"""
+        return name.strip().lower().replace(" ", "_")
 
-            print("Status: open, closed")
-            status = input("Status: ").strip().lower()
-
-            if pathfinder.add_road(from_loc, to_loc, distance, road_type, status):
-                print("✓ Road added successfully!")
-            else:
-                print("✗ Failed to add road")
-
-        elif choice == "3":
-            # Update road status
-            print("\n--- UPDATE ROAD STATUS ---")
-            from_loc = input("From location: ").strip().lower().replace(" ", "_")
-            to_loc = input("To location: ").strip().lower().replace(" ", "_")
-            new_status = input("New status (open/closed): ").strip().lower()
-
-            if pathfinder.update_road_status(from_loc, to_loc, new_status):
-                print("✓ Road status updated!")
-            else:
-                print("✗ Failed to update road status")
-
-        elif choice == "4":
-            # View all roads
-            print("\n--- ALL ROADS ---")
-            roads = pathfinder.list_roads()
-            print(f"\nTotal roads: {len(roads)}\n")
-            print(
-                f"{'From':<15} {'To':<15} {'Distance':<10} {'Type':<20} {'Status':<10}"
-            )
-            print("-" * 75)
-            for road in roads:
-                print(
-                    f"{str(road[0]):<15} {str(road[1]):<15} {str(road[2]):<10} {str(road[3]):<20} {str(road[4]):<10}"
-                )
-
-        elif choice == "5":
-            print("\nThank you for using the Path-Finder!")
-            break
-
-        else:
-            print("\n✗ Invalid option. Please try again.")
-
-
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def _failure(msg: str) -> Dict[str, Any]:
+        return {"success": False, "message": msg}
